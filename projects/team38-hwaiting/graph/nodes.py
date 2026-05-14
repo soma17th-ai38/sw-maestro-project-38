@@ -9,16 +9,18 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import sqlite3
+import sys
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from graph.cpu_index import get_cpu_index, tokenize_and_lookup
+from graph.db_path import resolve_db_path
 from graph.llm import invoke_with_retry, make_llm
-from graph.normalize import apply_canonical, extract_cpu_keyword
+from graph.normalize import apply_canonical
 from graph.prompts import NODE_B_SYSTEM, NODE_C_SYSTEM, NODE_F_SYSTEM
 from graph.state import (
     SLOT_KEYS,
@@ -48,14 +50,11 @@ def _log(node: str, **fields: Any) -> None:
     except Exception:  # noqa: BLE001
         line = str(payload)
     try:
-        print(line)
-    except UnicodeEncodeError:
-        # stdout 인코딩이 cp949 등 BMP 미지원이고 reconfigure 도 실패한 경우의 안전망.
-        # ASCII-replace 로 강등해서 출력만 한다 — 그래프 진행은 절대 끊지 않음.
-        try:
-            print(line.encode("ascii", "replace").decode("ascii"))
-        except Exception:  # noqa: BLE001
-            pass
+        out = sys.__stderr__ or sys.stderr
+        out.write(line + "\n")
+        out.flush()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -395,9 +394,22 @@ def _build_where(slots: Slots) -> tuple[str, list[Any]]:
         params.append(f"%{slots['os']}%")
 
     if slots.get("cpu"):
-        keyword = extract_cpu_keyword(str(slots["cpu"])) or str(slots["cpu"])
-        clauses.append("cpu LIKE ?")
-        params.append(f"%{keyword}%")
+        cpu_input = str(slots["cpu"])
+        index = get_cpu_index()
+        cpu_values = tokenize_and_lookup(index, cpu_input)
+        _log(
+            "D",
+            event="cpu_lookup",
+            cpu_input=cpu_input,
+            matched_count=len(cpu_values),
+            index_size=len(index),
+        )
+        if cpu_values:
+            placeholders = ",".join(["?"] * len(cpu_values))
+            clauses.append(f"cpu IN ({placeholders})")
+            params.extend(cpu_values)
+        else:
+            clauses.append("1=0")
 
     if slots.get("resolution"):
         clauses.append("resolution = ?")
@@ -425,7 +437,7 @@ def node_e_query(state: LaptopChatState) -> dict[str, Any]:
         return {"candidates": []}
 
     where_sql, params = clause
-    db_path = os.getenv("DB_PATH", "db/laptops.db")
+    db_path = resolve_db_path()
     sql = (
         f"SELECT id, product_name, screen_inch, weight_kg, os, resolution, "
         f"brightness_nits, cpu, ram_gb, storage_gb, price_krw, "

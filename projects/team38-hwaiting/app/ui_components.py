@@ -51,26 +51,33 @@ def render_sidebar(state: LaptopChatState, on_reset: Callable[[], None]) -> None
             )
 
         st.divider()
-        with st.expander("Raw State JSON"):
-            try:
-                serializable = {
-                    "slots": slots,
-                    "use_case": state.get("use_case"),
-                    "slot_options": state.get("slot_options") or {},
-                    "inferred_keys": sorted(inferred),
-                    "turn_count": state.get("turn_count"),
-                    "is_complete": state.get("is_complete"),
-                    "last_assistant_question": state.get("last_assistant_question"),
-                    "sql_clause": state.get("sql_clause"),
-                    "n_messages": len(state.get("messages") or []),
-                    "n_candidates": len(state.get("candidates") or []),
-                }
-                st.code(
-                    json.dumps(serializable, ensure_ascii=False, indent=2, default=str),
-                    language="json",
-                )
-            except Exception as e:  # noqa: BLE001
-                st.write(f"(serialize error: {e})")
+        st.subheader("🔧 백엔드 상태")
+
+        is_complete = state.get("is_complete", False)
+        turn = state.get("turn_count") or 0
+        sql_clause = state.get("sql_clause")
+        candidates = state.get("candidates") or []
+        use_case = state.get("use_case")
+
+        if use_case:
+            st.markdown(f"**사용 목적**: `{use_case}`")
+
+        st.markdown(f"**턴 수**: `{turn}`")
+
+        if is_complete:
+            st.success("Node B → D → E → F 실행됨")
+        elif turn > 0:
+            st.info("Node B → C 실행됨 (슬롯 수집 중)")
+
+        if sql_clause:
+            where_sql, params = sql_clause
+            st.markdown("**생성된 SQL WHERE 절**")
+            st.code(
+                f"SELECT * FROM laptops\nWHERE {where_sql}\nORDER BY price_krw ASC LIMIT 5",
+                language="sql",
+            )
+            st.markdown(f"**파라미터**: `{params}`")
+            st.markdown(f"**매칭 결과**: `{len(candidates)}건`")
 
         st.divider()
         if st.button("대화 초기화", use_container_width=True):

@@ -25,9 +25,13 @@ if str(_PROJECT_ROOT) not in sys.path:
 import streamlit as st  # noqa: E402
 from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
 
+from app.bootstrap import bootstrap_runtime  # noqa: E402
 from app.ui_components import render_results, render_sidebar  # noqa: E402
 from graph.build import build_graph  # noqa: E402
+from graph.cpu_index import get_cpu_index  # noqa: E402
 from graph.state import initial_state  # noqa: E402
+
+bootstrap_runtime()
 
 st.set_page_config(page_title="노트북 추천 챗봇", layout="wide")
 st.title("💻 노트북 추천 챗봇")
@@ -36,7 +40,14 @@ st.caption("9가지 조건을 자연스럽게 알려주시면 다나와 데이�
 
 @st.cache_resource(show_spinner=False)
 def _get_graph():
-    return build_graph()
+    graph = build_graph()
+    if not get_cpu_index():
+        st.warning(
+            "CPU 역색인이 비어 있습니다. `db/laptops.db` 시드 상태를 확인하세요. "
+            "(README: `sqlite3 db/laptops.db \".read db/schema.sql\"` + "
+            "`\".read db/seed_dummy.sql\"`)"
+        )
+    return graph
 
 
 def _reset_session() -> None:

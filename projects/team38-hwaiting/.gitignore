@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env / secrets
+.env
+
+# DB artifacts
+db/laptops.db
+db/laptops.db-journal
+db/laptops.db-wal
+db/laptops.db-shm
+
+# Local placeholder image (사용자가 직접 배치)
+app/static/no_image.png
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# E2E test artifacts
+.playwright-mcp/
+artifacts/
